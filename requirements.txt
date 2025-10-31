@@ -4,6 +4,10 @@ pandas
 matplotlib
 seaborn
 scikit-learn
+xgboost
 fpdf
+shap
 google-generativeai
 python-dotenv
+joblib
+scikit-learn>=1.0

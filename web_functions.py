@@ -1,51 +1,114 @@
+# web_functions.py
+# ----------------------------------------
+# Handles model loading, prediction, and metrics
+# ----------------------------------------
+
+import joblib
 import numpy as np
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
-import streamlit as st
+import os
+import json
+import streamlit as st # Added for caching
 
+# ----------------------------------------
+# Paths (Relative to the app's root)
+# ----------------------------------------
+# We assume the app is run from the project's root directory
+# (where main.py is)
+MODELS_DIR = "models"
+MODEL_PATH = os.path.join(MODELS_DIR, "model_pipeline.pkl")
+METRICS_PATH = os.path.join(MODELS_DIR, "metrics.json")
 
-@st.cache_data()
+# ----------------------------------------
+# Model Loading
+# ----------------------------------------
+@st.cache_resource  # Cache the loaded model for performance
+def load_model():
+    """
+    Loads the saved model pipeline from the .pkl file.
+    Uses @st.cache_resource to avoid reloading on every script run.
+    """
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Model file not found. Expected at: {MODEL_PATH}")
+    try:
+        model = joblib.load(MODEL_PATH)
+    except Exception as e:
+        raise RuntimeError(f"Error loading model from {MODEL_PATH}: {e}")
+    return model
 
-def load_data():
-    df=pd.read_csv('diabetes.csv')
-    X = df[['HbA1c_level','Pregnancies','Glucose','BloodPressure','SkinThickness','Insulin','BMI','DiabetesPedigreeFunction','Age']]
-    y = df['Outcome']
+# ----------------------------------------
+# Feature Order (so inputs match training order)
+# ----------------------------------------
+def get_feature_order():
+    """
+    Returns the exact order of features used during training.
+    This MUST match the order in your train_model.py script.
+    """
+    return [
+        "HbA1c_level",
+        "Pregnancies",
+        "Glucose",
+        "BloodPressure",
+        "SkinThickness",
+        "Insulin",
+        "BMI",
+        "DiabetesPedigreeFunction",
+        "Age",
+    ]
 
-    return df, X, y
+# ----------------------------------------
+# Prediction
+# ----------------------------------------
+def predict_diabetes(input_data: dict):
+    """
+    input_data: A dictionary with feature names as keys and
+                user-provided values.
+                
+    Returns: A dict containing prediction (0 or 1) and probability.
+    """
+    try:
+        # Load the entire pipeline (imputer, scaler, classifier)
+        model = load_model()
+        
+        # Get the correct feature order
+        feature_order = get_feature_order()
+        
+        # Create a DataFrame from the input_data,
+        # ensuring the columns are in the correct order.
+        input_df = pd.DataFrame([input_data])
+        input_df = input_df[feature_order] 
 
+        # The pipeline handles EVERYTHING:
+        # 1. Imputation (e.g., SimpleImputer)
+        # 2. Scaling (e.g., StandardScaler)
+        # 3. Prediction (e.g., RandomForestClassifier)
+        
+        # Use .predict() for the final class (0 or 1)
+        prediction = int(model.predict(input_df)[0])
+        
+        # Use .predict_proba() for the probabilities
+        # [0][1] gets the probability of the positive class (1)
+        probability = float(model.predict_proba(input_df)[0][1])
 
-@st.cache_data()
+        return {"prediction": prediction, "probability": probability}
 
-def train_model(X,y):
-    model = DecisionTreeClassifier(
-        ccp_alpha=0.0, #Increases the amount of pruning, which reduces overfitting. 
-        class_weight=None, #This parameter allows you to assign different weights to classes
-        criterion='entropy', #This parameter determines the function to measure the quality of a split.
-        max_depth=4, #A deeper tree can model more complex patterns but may lead to overfitting
-        max_features=None, #This parameter controls the number of features to consider when looking for the best split
-        max_leaf_nodes=None, #This parameter limits the maximum number of leaf nodes in the tree. Setting this parameter can help control overfitting.
-        min_impurity_decrease=0.0, #If the impurity decrease from a split is less than this value, the split will not be performed.
-        min_samples_leaf=1, #A smaller value allows the tree to create more leaves, which can lead to overfitting.
-        min_samples_split=2, #If a node has fewer samples than this value, it will not be split
-        min_weight_fraction_leaf=0.0, #This parameter controls the minimum weighted fraction of the total sum of weights 
-        random_state=42, #Setting it to an integer ensures that the results are reproducible.
-        splitter='best' #This parameter controls the strategy used to choose the split at each node.
-        )
+    except Exception as e:
+        return {"error": str(e)}
+
+# ----------------------------------------
+# Load Metrics
+# ----------------------------------------
+@st.cache_data  # Cache this data
+def load_metrics():
+    """
+    Loads model evaluation metrics from metrics.json (if available).
+    """
+    if not os.path.exists(METRICS_PATH):
+        return {"error": f"Metrics file not found at {METRICS_PATH}"}
     
-    model.fit(X,y)
-
-    score = model.score(X,y)
-
-    return model, score
-
-def predict(X, y, features):
-    model, score = train_model(X, y)
-    
-    # Reshape the features correctly
-    features = np.array(features).reshape(1, -1)  # Reshape to (1, n_features)
-    
-    prediction = model.predict(features)
-    
-    return prediction, score
-
-
+    try:
+        with open(METRICS_PATH, "r") as f:
+            metrics = json.load(f)
+        return metrics
+    except Exception as e:
+        return {"error": f"Error loading metrics: {e}"}

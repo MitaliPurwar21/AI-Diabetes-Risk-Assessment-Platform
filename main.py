@@ -1,32 +1,31 @@
 import streamlit as st
-from web_functions import load_data
-
-from Tabs import diagnosis, home, result,  kc, talk2doc
+from Tabs import diagnosis, home, result, kc, talk2doc
 
 # Configure the app
 st.set_page_config(
-    page_title = 'Diabetes Prediction System',
-    page_icon = '🥯',
-    layout = 'wide',
-    initial_sidebar_state = 'auto'
+    page_title='AI-Powered Diabetes Risk Assessment Platform',
+    page_icon='🥯',
+    layout='wide',
+    initial_sidebar_state='auto'
 )
 
+# Tab mapping
 Tabs = {
-    "Home":home,
-    "Ask Queries":talk2doc,
-    "Diagnosis":diagnosis,
-    "Result":result,
-    "Knowledge Center":kc
+    "Home": home,
+    "Ask Queries": talk2doc,
+    "Diagnosis": diagnosis,
+    "Result": result,
+    "Knowledge Center": kc
 }
 
+# Sidebar navigation
 st.sidebar.title('Navigation')
-
 page = st.sidebar.radio("Page", list(Tabs.keys()))
 st.sidebar.info('Made by Mitali')
 
-df, X, y = load_data()
-
-if page in ["Diagnosis"]:
-    Tabs[page].app(df, X, y)
+# Run selected tab
+if page == "Diagnosis":
+    # diagnosis.py will handle model loading and user input
+    Tabs[page].app()
 else:
     Tabs[page].app()

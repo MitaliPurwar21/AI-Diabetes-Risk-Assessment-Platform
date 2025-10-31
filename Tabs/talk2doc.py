@@ -31,7 +31,7 @@ def ask_gemini(query):
 # Streamlit UI
 def app():
     st.title("🩺 Diabetes Medical Chatbot")
-    st.image('./images/sugarbuddy.png')
+    st.image('./images/SugarBuddy_AI.png', width= 500)
     st.success("Please ask your queries related to diabetes and its health implications.")
 
     # Initialize chat history

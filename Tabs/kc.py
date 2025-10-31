@@ -1,50 +1,73 @@
 import streamlit as st
 
 def app():
-    st.markdown('''<h1><center>Knowledge Centre</center></h1>''',unsafe_allow_html=True)
-    # Paragraph 1: Diabetes Detection
+    st.markdown('''<h1><center>About This Project</center></h1>''', unsafe_allow_html=True)
+
+    # --- Paragraph 1: Diabetes Detection ---
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.image("./images/1.png", caption="Diabetes Detection", width=200)
+        st.image("./images/1.png", caption="ML Risk Classification", width=200)
     with col2:
         st.markdown('''
-            The diabetes care system is an advanced, data-driven platform designed to detect diabetes type and its stage using numerical data from medical test datasets. By leveraging machine learning algorithms, the system analyzes key health metrics such as blood glucose levels, HbA1c, insulin levels, and BMI to classify the type of diabetes (Type 1, Type 2, or prediabetes) and determine its progression stage. This automated detection process ensures accurate and timely diagnosis, enabling healthcare providers to intervene early. The system is user-friendly, allowing patients to upload their medical test results directly, and it generates a comprehensive analysis within seconds.
+            **1. Machine Learning Risk Classification**
+            
+            This project explores how machine learning can be used for diabetes risk classification. It uses a **synthetic dataset of 100,000 patient records** (generated from the original PIMA dataset's statistics) to train and compare three different models: Logistic Regression, Random Forest, and XGBoost.
+            
+            The system automatically selects the best-performing model (based on ROC AUC score) from the training script to provide predictions.
         ''')
 
-    # Paragraph 2: Medical Recommendations
+    # --- Paragraph 2: Explainable AI (XAI) ---
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown('''
-            In addition to detection, the system provides personalized medical recommendations based on the patient's specific condition. These recommendations include dietary plans, exercise routines, medication guidelines, and lifestyle modifications tailored to the individual's needs. The system also generates a detailed medical report, which can be downloaded in PDF format for easy sharing with healthcare professionals. This feature ensures that patients have a portable and accessible record of their health status, empowering them to take control of their diabetes management.
+            **2. Explainable AI (XAI) with SHAP**
+            
+            A key goal of this project is to move beyond "black box" predictions. When a prediction is made on the 'Diagnosis' page, the app generates a **SHAP (SHapley Additive exPlanations) force plot**.
+            
+            This chart shows exactly how each patient feature (like 'Glucose' or 'BMI') contributed to the final risk score, providing transparency and helping to build trust in the model's decision.
         ''')
     with col2:
-        st.image("./images/2.png", caption="Medical Recommendations", width=200)
+        st.image("./images/2.png", caption="Explainable AI (SHAP)", width=200)
 
-    # Paragraph 3: SugarBuddy AI Chatbot
+    # --- Paragraph 3: AI-Assisted Q&A ---
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.image("./images/3.png", caption="SugarBuddy Chatbot", width=200)
+        st.image("./images/3.png", caption="AI-Assisted Q&A", width=200)
     with col2:
         st.markdown('''
-            A standout feature of the system is SugarBuddy, an intelligent medical chatbot designed to answer any diabetes-related queries. SugarBuddy is equipped with a vast knowledge base, enabling it to provide information on symptoms, medication dosages, potential health implications, and side effects of treatments. The chatbot uses natural language processing (NLP) to understand user queries and deliver accurate, easy-to-understand responses. Whether a patient is unsure about their medication schedule or curious about the long-term effects of diabetes, SugarBuddy is available 24/7 to provide reliable support and guidance.
+            **3. AI-Assisted Q&A**
+            
+            The 'Ask Queries' tab features an AI-assisted Q&A tool. This is **not a custom-trained chatbot**, but rather a direct interface with **Google's Gemini API**.
+            
+            It is system-prompted to act as a medical assistant and can answer general questions about diabetes. This demonstrates the integration of large language models (LLMs) into a data science application.
         ''')
 
-    # Paragraph 4: Trend Visualization
+    # --- Paragraph 4: Analytical Dashboard ---
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown('''
-            The system also includes a visualization module named Trend, which provides insights into global diabetes trends. Trend uses interactive charts, maps, and graphs to display data such as the prevalence of diabetes across different regions, demographic patterns, and historical trends. This module is particularly useful for researchers, policymakers, and healthcare providers who need to understand the broader impact of diabetes. By visualizing data in an engaging and accessible way, Trend helps stakeholders make informed decisions and develop effective strategies for diabetes prevention and management.
+            **4. Analytical Dashboard**
+            
+            The 'Result' tab functions as an analytical dashboard for the project. Instead of tracking "global trends," this dashboard provides a **deep dive into the project's data and models**.
+            
+            It includes a model comparison table, a confusion matrix for the winning model, feature importance plots, and exploratory data analysis (EDA) visualizations like correlation heatmaps from the training data.
         ''')
     with col2:
-        st.image("./images/4.png", caption="Trend Visualization", width=200)
+        st.image("./images/4.png", caption="Analytical Dashboard", width=200)
 
-    # Paragraph 5: Streamlit Integration
+    # --- Paragraph 5: Streamlit Integration ---
     col1, col2 = st.columns([1, 2])
     with col1:
         st.image("./images/5.png", caption="Streamlit Integration", width=200)
     with col2:
         st.markdown('''
-            Built using Streamlit, the diabetes care system offers a seamless and interactive user experience. Streamlit's framework allows for easy integration of machine learning models, data visualizations, and interactive components, making the system both powerful and user-friendly. The platform is accessible via web browsers, ensuring compatibility across devices. With its combination of advanced analytics, personalized recommendations, and interactive features like SugarBuddy and Trend, this diabetes care system represents a significant step forward in diabetes management, providing patients and healthcare providers with the tools they need to combat this global health challenge.
+            **5. Project Architecture**
+            
+            This entire application is built in Python and served using **Streamlit**. The project follows modern development practices by separating concerns:
+            
+            * **`scripts/`**: A separate script handles all heavy model training and evaluation.
+            * **`models/`**: The trained model, metrics, and SHAP data are saved as artifacts.
+            * **`Tabs/`**: The Streamlit app is modularized, with each page as its own file.
         ''')
 
 # Run the app

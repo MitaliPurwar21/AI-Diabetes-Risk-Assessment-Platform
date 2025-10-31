@@ -1,426 +1,332 @@
+# Tabs/diagnosis.py
 import streamlit as st
-from web_functions import predict
+from web_functions import predict_diabetes, load_metrics, get_feature_order, load_model
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime
 import io
-import os
-import csv
+import shap
+import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier 
+from xgboost import XGBClassifier                   
+from sklearn.linear_model import LogisticRegression 
+import numpy as np 
 from dotenv import load_dotenv
 import google.generativeai as genai
 
+# -------------------------------
+# 🔑 Load environment and API key
+# -------------------------------
 load_dotenv()
-
-# Load API Key from Streamlit secrets
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", None)
 
 if not GEMINI_API_KEY:
-    raise ValueError("Gemini API key is missing! Add it to Streamlit secrets.")
+    st.warning("⚠️ Gemini API key missing. AI-assisted medical recommendations will not work.")
+else:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-genai.configure(api_key=GEMINI_API_KEY)
+# -------------------------------
+# 🧠 Main App Function
+# -------------------------------
+def app():
+    DATA_PATH = "./diabetes.csv"
+    df = pd.read_csv(DATA_PATH)
+    """Streamlit app for diabetes diagnosis and AI-assisted medical recommendation"""
 
-def app(df, X, y):
-    """This function creates the Streamlit app with tabs."""
     st.markdown("""
     <style>
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
         font-size: 24px;
-        color: #0000cc; /* Neon cyan text color */
-        
+        color: #0000cc;
     }
-</style>
+    </style>
+    """, unsafe_allow_html=True)
 
-""", unsafe_allow_html=True)
-    # Create two tabs
     tab1, tab2, tab3 = st.tabs(["Diagnosis 🩺", "Medication 💊", "Data Source 🛢️"])
 
-    # First Tab: Prediction Page
+    # ---------------- Tab 1: Diagnosis ----------------
     with tab1:
         st.title("Diagnosis Page")
-        st.write("The aim is to detect the different types of diabetes and the risk of onset from the clinical test data. This makes the detection process extremely fast and feature-rich augmenting treatment experience and ease of access for both patient and physician")
+        st.write("Detect diabetes risk levels from clinical data using the best-performing trained model.")
 
-        # Take input of features from the user
-        st.subheader("Select Values:")
-        hba1c = st.slider("HbA1c Level", float(df["HbA1c_level"].min()), float(df["HbA1c_level"].max()))
-        glucose = st.slider("Glucose", int(df["Glucose"].min()), int(df["Glucose"].max()))
-        bp = st.slider("BloodPressure", int(df["BloodPressure"].min()), int(df["BloodPressure"].max()))
-        skinthickness = st.slider("SkinThickness", int(df["SkinThickness"].min()), int(df["SkinThickness"].max()))
-        insulin = st.slider("Insulin", int(df["Insulin"].min()), int(df["Insulin"].max()))
-        bmi = st.slider("BMI", float(df["BMI"].min()), float(df["BMI"].max()))
-        pedigree = st.slider("Genetic Correlation", float(df["DiabetesPedigreeFunction"].min()), float(df["DiabetesPedigreeFunction"].max()))
-        age = st.slider("Age", int(df["Age"].min()), int(df["Age"].max()))
-        preg = st.slider("Pregnancies", int(df["Pregnancies"].min()), int(df["Pregnancies"].max()))
+        # --- FIXED: Removed the broken sidebar metrics ---
+        # (The result.py tab now handles this correctly)
 
-        # Create a list to store all the features
-        features = [hba1c, glucose, bp, skinthickness, insulin, bmi, pedigree, preg, age]
+        # Dynamic feature inputs
+        feature_order = get_feature_order()
+        user_input = {}
 
-        # Create a DataFrame to store slider values
-        slider_values = {
-            "Feature": ["HbA1c Level", "Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI", "Genetic Correlation", "Pregnancies", "Age"],
-            "Value": [hba1c, glucose, bp, skinthickness, insulin, bmi, pedigree, preg, age]
-        }
-        slider_df = pd.DataFrame(slider_values)
+        for feature in feature_order:
+            if feature == "Pregnancies" or feature == "Age":
+                user_input[feature] = st.slider(feature, 0, 20 if feature == "Pregnancies" else 90, 1)
+            elif feature == "Glucose":
+                user_input[feature] = st.slider(feature, 40, 250, 120)
+            elif feature == "BloodPressure":
+                user_input[feature] = st.slider(feature, 30, 140, 70)
+            elif feature == "SkinThickness":
+                user_input[feature] = st.slider(feature, 0, 99, 20)
+            elif feature == "Insulin":
+                user_input[feature] = st.slider(feature, 0, 900, 100)
+            elif feature == "BMI":
+                user_input[feature] = st.slider(feature, 15.0, 60.0, 25.0)
+            elif feature == "DiabetesPedigreeFunction":
+                user_input[feature] = st.slider(feature, 0.1, 2.5, 0.5)
+            elif feature == "HbA1c_level":
+                user_input[feature] = st.slider(feature, 4.0, 14.0, 6.0)
 
-        # Create a button to predict
-        if st.button("Predict"):
-            # Get prediction and model score
-            prediction, score = predict(X, y, features)
-            score = score + 0.18  # Correction factor
-           
-            # Store prediction result
-            prediction_result = ""
-            
-            # Print the output according to the prediction
-            if prediction == 1:
-                prediction_result = "The person has a high risk of diabetes type 1"
-                st.warning(prediction_result)
-            elif prediction == 2:
-                prediction_result = "The person has a high risk of diabetes type 2"
-                st.warning(prediction_result)
-            elif prediction == 3 and preg > 0:
-                prediction_result = "The person has a high risk of gestational diabetes"
-                st.warning(prediction_result)
-            elif prediction == 4:
-                prediction_result = "The person is prediabetic"
-                st.warning(prediction_result)
-            elif prediction == 5:
-                prediction_result = "The person is having Monogenic Diabetes, Latent Autoimmune Diabetes in Adults or type 3c diabetes"
-                st.warning(prediction_result)
-            else:
-                prediction_result = "The person is free from diabetes"
-                st.success(prediction_result)
-
-            # Print the score of the model
-            model_accuracy = f"The model used is trusted by doctors and has an accuracy of {round((score * 100), 2)}%"
-            st.sidebar.write(model_accuracy)
-
-            # Store these in session state for PDF generation
-            st.session_state['prediction_result'] = prediction_result
-            st.session_state['model_accuracy'] = model_accuracy
-
-        # Display the slider values in a table
+        # Display selected values
         st.subheader("Selected Values:")
-        st.table(slider_df)
+        st.table(pd.DataFrame(user_input.items(), columns=["Feature", "Value"]))
 
-        # Download section
+        # Predict
+        if st.button("Predict"):
+            try:
+                result = predict_diabetes(user_input)
+
+                if "error" in result:
+                    st.error(f"Prediction failed: {result['error']}")
+                else:
+                    prediction = result["prediction"]
+                    prob = result["probability"]
+
+                    if prediction == 1:
+                        msg = f"⚠️ The model predicts **Diabetes** with probability {prob * 100:.2f}%"
+                        st.warning(msg)
+                    else:
+                        msg = f"✅ The model predicts **No Diabetes** with probability {(1 - prob) * 100:.2f}%"
+                        st.success(msg)
+
+                    # Save for PDF
+                    st.session_state['prediction_result'] = msg
+                    st.session_state['predicted_probability'] = f"{prob * 100:.2f}%"
+                    st.session_state['user_input_data'] = user_input
+                    
+                    # --- NEW: SHAP EXPLANATION (Corrected Plotting) ---
+                    st.subheader("🔬 Prediction Explained")
+                    
+                    try:
+                        # 1. Load model and get components
+                        model = load_model() 
+                        clf = model.named_steps['clf']
+                        preprocessor = model[:-1] # Get the full preprocessor
+                        
+                        # 3. Prepare user input
+                        feature_order = get_feature_order()
+                        input_df = pd.DataFrame([user_input])[feature_order]
+                        
+                        # 4. Apply the FULL preprocessing pipeline
+                        input_processed = preprocessor.transform(input_df)
+
+                        # 5. Create SHAP explainer based on model type
+                        
+                        # --- Handle Tree Models ---
+                        if isinstance(clf, (RandomForestClassifier, XGBClassifier)):
+                            explainer = shap.TreeExplainer(clf)
+                            shap_values = explainer.shap_values(input_processed)
+                            expected_value = explainer.expected_value
+
+                            shap_vals_for_plot = None
+                            expected_val_for_plot = None
+
+                            if isinstance(shap_values, list) and len(shap_values) == 2:
+                                shap_vals_for_plot = shap_values[1][0] # Use class 1
+                                expected_val_for_plot = expected_value[1]
+                            else:
+                                shap_vals_for_plot = shap_values[0]
+                                expected_val_for_plot = expected_value
+
+                            if shap_vals_for_plot is not None:
+                                st.write("This chart shows how each feature *pushed* the prediction from the 'base' value (average prediction) to the final output. Red features increase the risk, blue features decrease it.")
+                                
+                                # --- FIXED PLOTTING ---
+                                # 1. Remove the bad plt.subplots() line
+                                # 2. Capture the figure returned by shap.force_plot
+                                force_plot_fig = shap.force_plot(
+                                    expected_val_for_plot, 
+                                    shap_vals_for_plot, 
+                                    input_df, 
+                                    matplotlib=True, 
+                                    show=False,
+                                    figsize=(20, 3) # Pass figsize here
+                                )
+                                # 3. Plot the correct figure
+                                st.pyplot(force_plot_fig, bbox_inches='tight')
+                                                            
+                        # --- Handle Linear Models ---
+                        elif isinstance(clf, LogisticRegression):
+                            background_data = np.load("models/shap_background.npy")
+                            explainer = shap.LinearExplainer(clf, background_data)
+                            shap_values = explainer.shap_values(input_processed)
+                            
+                            st.write("This chart shows how each feature *pushed* the prediction from the 'base' value (average prediction) to the final output. Red features increase the risk, blue features decrease it.")
+                            
+                            # --- FIXED PLOTTING ---
+                            # 1. Remove the bad plt.subplots() line
+                            # 2. Capture the figure returned by shap.force_plot
+                            force_plot_fig = shap.force_plot(
+                                explainer.expected_value, 
+                                shap_values[0], 
+                                input_df, 
+                                matplotlib=True, 
+                                show=False,
+                                figsize=(20, 3) # Pass figsize here
+                            )
+                            # 3. Plot the correct figure
+                            st.pyplot(force_plot_fig, bbox_inches='tight')
+                            
+                        # --- Handle other models ---
+                        else:
+                            st.info(f"SHAP explanations are not currently configured for the winning model type ({type(clf).__name__}).")
+
+                    except Exception as e:
+                        st.error(f"An error occurred during SHAP analysis: {e}")
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
+
+        # PDF Download
         st.subheader("Download Test Report")
         user_name = st.text_input("Enter your name (required for download):")
 
         if user_name:
-            col1, col2 = st.columns(2)
+            if 'prediction_result' in st.session_state:
+                # --- PDF Generation ---
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", 'B', 16)
+                pdf.cell(200, 10, txt="Diabetes Risk Assessment Report", ln=True, align='C')
+                pdf.ln(10)
 
-            # PDF Download Button
-            with col1:
-                try:
-                    # Generate PDF
-                    pdf = FPDF()
-                    pdf.add_page()
-                    
-                    # Add title
-                    pdf.set_font("Arial", 'B', 16)
-                    pdf.cell(200, 10, txt="Diabetes Risk Assessment Report", ln=True, align='C')
-                    pdf.ln(10)
+                pdf.set_font("Arial", size=12)
+                pdf.cell(200, 10, txt=f"User Name: {user_name}", ln=True)
+                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+                pdf.ln(10)
 
-                    # Add user name and timestamp
-                    pdf.set_font("Arial", size=12)
-                    pdf.cell(200, 10, txt=f"User Name: {user_name}", ln=True)
-                    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-                    pdf.ln(10)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(200, 10, txt="Prediction Result:", ln=True)
+                pdf.set_font("Arial", size=12)
 
-                    # Add prediction result if available
-                    if 'prediction_result' in st.session_state:
-                        pdf.set_font("Arial", 'B', 12)
-                        pdf.cell(200, 10, txt="Prediction Result:", ln=True)
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(200, 10, txt=st.session_state.get('prediction_result', ''), ln=True)
-                        pdf.ln(5)
+                import re
+                clean_text = re.sub(r'[^\x00-\x7F]+', '', st.session_state['prediction_result'])
+                pdf.multi_cell(0, 10, clean_text)
+                pdf.ln(5)
 
-                    # Add model accuracy if available
-                    if 'model_accuracy' in st.session_state:
-                        pdf.set_font("Arial", 'B', 12)
-                        pdf.cell(200, 10, txt="Model Accuracy:", ln=True)
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(200, 10, txt=st.session_state.get('model_accuracy', ''), ln=True)
-                        pdf.ln(10)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(200, 10, txt="Predicted Probability:", ln=True)
+                pdf.set_font("Arial", size=12)
+                pdf.cell(200, 10, txt=st.session_state['predicted_probability'], ln=True)
+                pdf.ln(10)
 
-                    # Add the measurements table
-                    pdf.set_font("Arial", 'B', 12)
-                    pdf.cell(200, 10, txt="Measurements:", ln=True)
-                    pdf.set_font("Arial", size=12)
-                    
-                    # Create the data table
-                    for index, row in slider_df.iterrows():
-                        pdf.cell(100, 10, txt=f"{row['Feature']}:", ln=False)
-                        pdf.cell(100, 10, txt=f"{str(row['Value'])}", ln=True)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(200, 10, txt="Measurements:", ln=True)
+                pdf.set_font("Arial", size=12)
+                for feature, value in user_input.items():
+                    pdf.cell(100, 10, txt=f"{feature}:", ln=False)
+                    pdf.cell(100, 10, txt=f"{value}", ln=True)
 
-                    # Create a temporary file path
-                    temp_file = f"temp_{user_name}_report.pdf"
-                    
-                    # Save PDF to a temporary file
-                    pdf.output(temp_file)
-                    
-                    # Read the temporary file and create download button
-                    with open(temp_file, 'rb') as file:
-                        pdf_data = file.read()
-                        st.download_button(
-                            label="Download PDF Report",
-                            data=pdf_data,
-                            file_name=f"{user_name}_diabetes_report.pdf",
-                            mime="application/pdf",
-                        )
-                    
-                    # Import os and remove the temporary file
-                    
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
+                pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-                except Exception as e:
-                    pass
-                try:
-                    # Generate PDF
-                    pdf = FPDF()
-                    pdf.add_page()
-                    
-                    # Add title
-                    pdf.set_font("Arial", 'B', 16)
-                    pdf.cell(200, 10, txt="Diabetes Risk Assessment Report", ln=True, align='C')
-                    pdf.ln(10)
+                # --- CSV Generation ---
+                slider_df = pd.DataFrame(user_input.items(), columns=["Feature", "Value"])
+                csv_buffer = io.StringIO()
+                slider_df.to_csv(csv_buffer, index=False)
+                csv_bytes = csv_buffer.getvalue()
 
-                    # Add user name and timestamp
-                    pdf.set_font("Arial", size=12)
-                    pdf.cell(200, 10, txt=f"User Name: {user_name}", ln=True)
-                    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-                    pdf.ln(10)
-
-                    # Add prediction result if available
-                    if 'prediction_result' in st.session_state:
-                        pdf.set_font("Arial", 'B', 12)
-                        pdf.cell(200, 10, txt="Prediction Result:", ln=True)
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(200, 10, txt=st.session_state.get('prediction_result', ''), ln=True)
-                        pdf.ln(5)
-
-                    # Add model accuracy if available
-                    if 'model_accuracy' in st.session_state:
-                        pdf.set_font("Arial", 'B', 12)
-                        pdf.cell(200, 10, txt="Model Accuracy:", ln=True)
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(200, 10, txt=st.session_state.get('model_accuracy', ''), ln=True)
-                        pdf.ln(10)
-
-                    # Add the measurements table
-                    pdf.set_font("Arial", 'B', 12)
-                    pdf.cell(200, 10, txt="Measurements:", ln=True)
-                    pdf.set_font("Arial", size=12)
-                    
-                    # Create the data table
-                    for index, row in slider_df.iterrows():
-                        pdf.cell(100, 10, txt=f"{row['Feature']}:", ln=False)
-                        pdf.cell(100, 10, txt=f"{str(row['Value'])}", ln=True)
-
-                    # Save to bytes
-                    pdf_output = io.BytesIO()
-                    pdf.output(pdf_output)
-                    pdf_bytes = pdf_output.getvalue()
-                    
-                    # Create download button
+                # --- Download Buttons (in columns) ---
+                col1, col2 = st.columns(2)
+                
+                with col1:
                     st.download_button(
-                        label="Download PDF Report",
+                        label="📄 Download PDF Report",
                         data=pdf_bytes,
                         file_name=f"{user_name}_diabetes_report.pdf",
                         mime="application/pdf",
                     )
-                except Exception as e:
-                    st.success("Your report is generated")
-
-            # CSV Download Button
-            with col2:
-                try:
-                    # Convert DataFrame to CSV
-                    csv_buffer = io.StringIO()
-                    slider_df.to_csv(csv_buffer, index=False)
-                    
-                    # Create download button
+                
+                with col2:
                     st.download_button(
-                        label="Download CSV Data",
-                        data=csv_buffer.getvalue(),
+                        label="💾 Download CSV Data",
+                        data=csv_bytes,
                         file_name=f"{user_name}_diabetes_data.csv",
                         mime="text/csv",
                     )
-                except Exception as e:
-                    st.error(f"Error generating CSV: {str(e)}")
+            else:
+                st.info("Run prediction first to generate a report.")
         else:
             st.info("Please enter your name to enable downloads.")
 
-
+    # ---------------- Tab 2: Medication ----------------
     with tab2:
-        
-            def get_gemini_medication_recommendation(disease_type, patient_data):
-                prompt = f"""
-                You are a medical expert. Based on the following disease diagnosis, suggest the appropriate medications, their dosage, and additional lifestyle recommendations:
-                
-                **Disease Type**: {disease_type}
-                
-                **Patient Data**:
-                {patient_data}
-                
-                Provide a clear and structured recommendation including:
-                - Medication name
-                - Recommended dosage
-                - Special precautions
-                - Any additional lifestyle suggestions
-                """
-                
-                model = genai.GenerativeModel("gemini-2.0-flash")  # Using Gemini Pro for text-based generation
-                response = model.generate_content(prompt)
-                
-                return response.text
+        st.title("AI-Assisted Medical Recommendations")
 
-            # Streamlit UI
-            st.title("Medication Recommendations")
-            st.markdown(
-                """
-                    <p style="font-size:25px">
-                        Upload your patient data to get medication recommendations.
-                    </p>
-                """, unsafe_allow_html=True
-            )
+        def get_gemini_medication_recommendation(disease_type, patient_data):
+            if not GEMINI_API_KEY:
+                return "Gemini API key not configured."
+            prompt = f"""
+            You are a medical expert. Based on this disease diagnosis, suggest medications and lifestyle recommendations:
+            Disease: {disease_type}
+            Patient Data: {patient_data}
+            """
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            return response.text
 
-            # File uploader for CSV files
-            uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+        uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+        if uploaded_file is not None:
+            try:
+                df_uploaded = pd.read_csv(uploaded_file)
+                st.dataframe(df_uploaded)
 
-            if uploaded_file is not None:
-                try:
-                    df_original = pd.read_csv(uploaded_file)
+                if df_uploaded.shape[1] < 2:
+                    st.error("CSV must have at least two columns: parameter and value.")
+                    st.stop()
 
-                    # Display original data
-                    st.subheader("Original Data:")
-                    st.dataframe(df_original)
+                df_processed = pd.DataFrame([{p: v for p, v in zip(df_uploaded.iloc[:, 0], df_uploaded.iloc[:, 1])}])
 
-                    if df_original.shape[1] < 2:
-                        st.error("CSV file must have at least two columns: parameters and values")
-                        st.stop()
+                required_cols = get_feature_order()
+                missing = [c for c in required_cols if c not in df_processed.columns]
+                if missing:
+                    st.error(f"Missing columns: {', '.join(missing)}")
+                    st.stop()
 
-                    # Convert the uploaded data into a structured format
-                    df_processed = pd.DataFrame([
-                        {param: value for param, value in zip(df_original.iloc[:, 0], df_original.iloc[:, 1])}
-                    ])
+                features = {f: df_processed[f].iloc[0] for f in required_cols}
 
-                    # Display transformed data
-                    st.subheader("Transformed Data:")
-                    st.dataframe(df_processed)
+                result = predict_diabetes(features)
+                prediction = result["prediction"]
+                prob = result["probability"]
 
-                    # Required columns check
-                    required_columns = [
-                        'HbA1c Level', 'Glucose', 'BloodPressure', 'SkinThickness', 
-                        'Insulin', 'BMI', 'Genetic Correlation', 'Pregnancies', 'Age'
-                    ]
-                    
-                    missing_columns = [col for col in required_columns if col not in df_processed.columns]
-                    
-                    if missing_columns:
-                        st.error(f"Missing required columns: {', '.join(missing_columns)}")
-                        st.write("Your CSV should have these parameters in the first column:")
-                        st.write(required_columns)
-                        st.stop()
+                disease = "Diabetes Detected" if prediction == 1 else "No Diabetes"
 
-                    try:
-                        # Convert all columns to numeric
-                        for col in required_columns:
-                            df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
-                        
-                        df_processed['Pregnancies'] = df_processed['Pregnancies'].fillna(0).astype(int)
+                st.subheader("Patient Recommendation:")
+                if disease == "Diabetes Detected":
+                    st.warning(disease)
+                    recommendation = get_gemini_medication_recommendation(disease, df_processed.to_dict())
+                    st.info("Gemini AI Recommended Medication:")
+                    st.write(recommendation)
+                else:
+                    st.success("No diabetes detected.")
+                    st.info("Maintain a healthy lifestyle.")
 
-                        # Extract features for prediction
-                        features = [
-                            float(df_processed.iloc[0]['HbA1c Level']),
-                            float(df_processed.iloc[0]['Glucose']),
-                            float(df_processed.iloc[0]['BloodPressure']),
-                            float(df_processed.iloc[0]['SkinThickness']),
-                            float(df_processed.iloc[0]['Insulin']),
-                            float(df_processed.iloc[0]['BMI']),
-                            float(df_processed.iloc[0]['Genetic Correlation']),
-                            int(df_processed.iloc[0]['Pregnancies']),
-                            float(df_processed.iloc[0]['Age'])
-                        ]
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-                        # Make prediction
-                        prediction, confidence = predict(X, y, features)
-
-                        # Disease mapping
-                        disease_type = ""
-                        if prediction == 1:
-                            disease_type = "High risk of diabetes type 1"
-                        elif prediction == 2:
-                            disease_type = "High risk of diabetes type 2"
-                        elif prediction == 3 and df_processed.iloc[0]['Pregnancies'] > 0:
-                            disease_type = "High risk of gestational diabetes"
-                        elif prediction == 4:
-                            disease_type = "Prediabetes"
-                        elif prediction == 5:
-                            disease_type = "Monogenic Diabetes or Type 3c diabetes"
-                        else:
-                            disease_type = "No diabetes detected"
-
-                        st.subheader("Patient Recommendation:")
-                        
-                        if disease_type != "No diabetes detected":
-                            st.warning(disease_type)
-                            patient_data = df_processed.iloc[0].to_dict()
-                            
-                            # Call Gemini to generate medication recommendations
-                            medication_info = get_gemini_medication_recommendation(disease_type, patient_data)
-
-                            st.info("Gemini AI Recommended Medication:")
-                            st.write(medication_info)
-                        else:
-                            st.success("No diabetes detected")
-                            st.info("Maintain a healthy lifestyle.")
-
-                        st.write(f"Prediction confidence: {confidence:.2f}%")
-
-                    except Exception as e:
-                        st.error(f"Error processing the data: {str(e)}")
-                        st.write("Please ensure all values are numeric and properly formatted.")
-
-                except Exception as e:
-                    st.error(f"Error reading the file: {str(e)}")
-
-
-                    
-
-                       
-    # Second Tab: Data Source Page
+    # ---------------- Tab 3: Data Source ----------------
     with tab3:
         st.title("Data Info Page")
-        st.subheader("View Data")
-
-        # Create an expansion option to check the data
         with st.expander("View data"):
             st.dataframe(df)
 
-        # Create a section for columns description
         st.subheader("Columns Description:")
+        col1, col2, col3 = st.columns(3)
 
-             # Create multiple checkboxes in a row
-        col_name, summary, col_data = st.columns(3)
-
-        # Show name of all columns
-        with col_name:
+        with col1:
             if st.checkbox("Column Names"):
                 st.dataframe(df.columns)
 
-        # Show datatype of all columns
-        with summary:
+        with col2:
             if st.checkbox("View Summary"):
                 st.dataframe(df.describe())
 
-        # Show data for each column
-        with col_data:
+        with col3:
             if st.checkbox("Columns Data"):
                 col = st.selectbox("Column Name", list(df.columns))
                 st.dataframe(df[col])
-
-        # Add the link to the dataset
-        # st.link_button("View Data Set", "https://www.kaggle.com/uciml/pima-indians-diabetes-database")
-        
