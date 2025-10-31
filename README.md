@@ -2,6 +2,8 @@
 
 This project is a complete, end-to-end data science application built in Python and Streamlit. It moves beyond a simple "black box" prediction by comparing multiple ML models, selecting the best one, and providing in-depth, explainable AI (XAI) analysis for each prediction using SHAP.
 
+**Link to the deployed app:** https://ai-powered-diabetes-risk-assessment-platform.streamlit.app/
+
 ---
 
 ## Key Features
