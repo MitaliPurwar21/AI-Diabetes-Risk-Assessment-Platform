@@ -1,16 +1,16 @@
 # Tabs/diagnosis.py
 import streamlit as st
-from web_functions import predict_diabetes, load_metrics, get_feature_order, load_model
+from web_functions import predict_diabetes, load_metrics, get_feature_order, get_encoded_feature_names, load_model
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime
 import io
 import shap
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier 
-from xgboost import XGBClassifier                   
-from sklearn.linear_model import LogisticRegression 
-import numpy as np 
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.linear_model import LogisticRegression
+import numpy as np
 from dotenv import load_dotenv
 import google.generativeai as genai
 
@@ -29,7 +29,7 @@ else:
 # 🧠 Main App Function
 # -------------------------------
 def app():
-    DATA_PATH = "./diabetes.csv"
+    DATA_PATH = "./diabetes_prediction_dataset.csv"
     df = pd.read_csv(DATA_PATH)
     """Streamlit app for diabetes diagnosis and AI-assisted medical recommendation"""
 
@@ -49,34 +49,28 @@ def app():
         st.title("Diagnosis Page")
         st.write("Detect diabetes risk levels from clinical data using the best-performing trained model.")
 
-        # --- FIXED: Removed the broken sidebar metrics ---
-        # (The result.py tab now handles this correctly)
-
-        # Dynamic feature inputs
-        feature_order = get_feature_order()
+        # Inputs for the real dataset's features
         user_input = {}
+        col1, col2 = st.columns(2)
 
-        for feature in feature_order:
-            if feature == "Pregnancies" or feature == "Age":
-                user_input[feature] = st.slider(feature, 0, 20 if feature == "Pregnancies" else 90, 1)
-            elif feature == "Glucose":
-                user_input[feature] = st.slider(feature, 40, 250, 120)
-            elif feature == "BloodPressure":
-                user_input[feature] = st.slider(feature, 30, 140, 70)
-            elif feature == "SkinThickness":
-                user_input[feature] = st.slider(feature, 0, 99, 20)
-            elif feature == "Insulin":
-                user_input[feature] = st.slider(feature, 0, 900, 100)
-            elif feature == "BMI":
-                user_input[feature] = st.slider(feature, 15.0, 60.0, 25.0)
-            elif feature == "DiabetesPedigreeFunction":
-                user_input[feature] = st.slider(feature, 0.1, 2.5, 0.5)
-            elif feature == "HbA1c_level":
-                user_input[feature] = st.slider(feature, 4.0, 14.0, 6.0)
+        with col1:
+            user_input["age"] = st.slider("Age", 0, 100, 40)
+            user_input["bmi"] = st.slider("BMI", 10.0, 60.0, 27.0)
+            user_input["HbA1c_level"] = st.slider("HbA1c level", 3.5, 9.0, 5.5)
+            user_input["blood_glucose_level"] = st.slider("Blood glucose level", 80, 300, 120)
+
+        with col2:
+            user_input["gender"] = st.selectbox("Gender", ["Female", "Male", "Other"])
+            user_input["smoking_history"] = st.selectbox(
+                "Smoking history",
+                ["never", "No Info", "current", "former", "ever", "not current"]
+            )
+            user_input["hypertension"] = 1 if st.checkbox("Hypertension") else 0
+            user_input["heart_disease"] = 1 if st.checkbox("Heart disease") else 0
 
         # Display selected values
         st.subheader("Selected Values:")
-        st.table(pd.DataFrame(user_input.items(), columns=["Feature", "Value"]))
+        st.table(pd.DataFrame([(k, str(v)) for k, v in user_input.items()], columns=["Feature", "Value"]))
 
         # Predict
         if st.button("Predict"):
@@ -100,83 +94,58 @@ def app():
                     st.session_state['prediction_result'] = msg
                     st.session_state['predicted_probability'] = f"{prob * 100:.2f}%"
                     st.session_state['user_input_data'] = user_input
-                    
-                    # --- NEW: SHAP EXPLANATION (Corrected Plotting) ---
+
+                    # --- SHAP EXPLANATION ---
                     st.subheader("🔬 Prediction Explained")
-                    
+
                     try:
-                        # 1. Load model and get components
-                        model = load_model() 
+                        # Load model, split off the classifier + preprocessor
+                        model = load_model()
                         clf = model.named_steps['clf']
-                        preprocessor = model[:-1] # Get the full preprocessor
-                        
-                        # 3. Prepare user input
+                        preprocessor = model[:-1]
+
+                        # Preprocess the user's row into the encoded space
                         feature_order = get_feature_order()
                         input_df = pd.DataFrame([user_input])[feature_order]
-                        
-                        # 4. Apply the FULL preprocessing pipeline
                         input_processed = preprocessor.transform(input_df)
+                        enc_names = get_encoded_feature_names(model)
 
-                        # 5. Create SHAP explainer based on model type
-                        
-                        # --- Handle Tree Models ---
+                        # SHAP values for this row (tree vs linear explainer)
+                        raw = None
                         if isinstance(clf, (RandomForestClassifier, XGBClassifier)):
-                            explainer = shap.TreeExplainer(clf)
-                            shap_values = explainer.shap_values(input_processed)
-                            expected_value = explainer.expected_value
-
-                            shap_vals_for_plot = None
-                            expected_val_for_plot = None
-
-                            if isinstance(shap_values, list) and len(shap_values) == 2:
-                                shap_vals_for_plot = shap_values[1][0] # Use class 1
-                                expected_val_for_plot = expected_value[1]
-                            else:
-                                shap_vals_for_plot = shap_values[0]
-                                expected_val_for_plot = expected_value
-
-                            if shap_vals_for_plot is not None:
-                                st.write("This chart shows how each feature *pushed* the prediction from the 'base' value (average prediction) to the final output. Red features increase the risk, blue features decrease it.")
-                                
-                                # --- FIXED PLOTTING ---
-                                # 1. Remove the bad plt.subplots() line
-                                # 2. Capture the figure returned by shap.force_plot
-                                force_plot_fig = shap.force_plot(
-                                    expected_val_for_plot, 
-                                    shap_vals_for_plot, 
-                                    input_df, 
-                                    matplotlib=True, 
-                                    show=False,
-                                    figsize=(20, 3) # Pass figsize here
-                                )
-                                # 3. Plot the correct figure
-                                st.pyplot(force_plot_fig, bbox_inches='tight')
-                                                            
-                        # --- Handle Linear Models ---
+                            raw = shap.TreeExplainer(clf).shap_values(input_processed)
                         elif isinstance(clf, LogisticRegression):
                             background_data = np.load("models/shap_background.npy")
-                            explainer = shap.LinearExplainer(clf, background_data)
-                            shap_values = explainer.shap_values(input_processed)
-                            
-                            st.write("This chart shows how each feature *pushed* the prediction from the 'base' value (average prediction) to the final output. Red features increase the risk, blue features decrease it.")
-                            
-                            # --- FIXED PLOTTING ---
-                            # 1. Remove the bad plt.subplots() line
-                            # 2. Capture the figure returned by shap.force_plot
-                            force_plot_fig = shap.force_plot(
-                                explainer.expected_value, 
-                                shap_values[0], 
-                                input_df, 
-                                matplotlib=True, 
-                                show=False,
-                                figsize=(20, 3) # Pass figsize here
-                            )
-                            # 3. Plot the correct figure
-                            st.pyplot(force_plot_fig, bbox_inches='tight')
-                            
-                        # --- Handle other models ---
+                            raw = shap.LinearExplainer(clf, background_data).shap_values(input_processed)
                         else:
-                            st.info(f"SHAP explanations are not currently configured for the winning model type ({type(clf).__name__}).")
+                            st.info(f"SHAP explanations are not configured for {type(clf).__name__}.")
+
+                        if raw is not None:
+                            # squeeze whatever shape the explainer returns down to one
+                            # value per feature for the positive (diabetes) class
+                            if isinstance(raw, list):
+                                arr = np.array(raw[1] if len(raw) > 1 else raw[0])
+                            else:
+                                arr = np.array(raw)
+                            if arr.ndim == 3:      # (samples, features, classes)
+                                row = arr[0, :, -1]
+                            elif arr.ndim == 2:    # (samples, features)
+                                row = arr[0]
+                            else:
+                                row = arr
+
+                            contrib = pd.DataFrame({"feature": enc_names, "shap": row})
+                            contrib = contrib[contrib["shap"].abs() > 1e-6].sort_values("shap")
+
+                            st.write("Each bar shows how that feature pushed this prediction. Red pushes toward diabetes, blue pushes away.")
+                            fig, ax = plt.subplots(figsize=(8, max(3, 0.45 * len(contrib))))
+                            colors = ["#FF4B4B" if v > 0 else "#4B8BFF" for v in contrib["shap"]]
+                            ax.barh(contrib["feature"], contrib["shap"], color=colors)
+                            ax.axvline(0, color="grey", linewidth=0.8)
+                            ax.set_xlabel("SHAP value  (→ higher diabetes risk)")
+                            ax.set_title("Feature contributions to this prediction")
+                            plt.tight_layout()
+                            st.pyplot(fig)
 
                     except Exception as e:
                         st.error(f"An error occurred during SHAP analysis: {e}")
@@ -233,7 +202,7 @@ def app():
 
                 # --- Download Buttons (in columns) ---
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     st.download_button(
                         label="📄 Download PDF Report",
@@ -241,7 +210,7 @@ def app():
                         file_name=f"{user_name}_diabetes_report.pdf",
                         mime="application/pdf",
                     )
-                
+
                 with col2:
                     st.download_button(
                         label="💾 Download CSV Data",
@@ -266,10 +235,15 @@ def app():
             Disease: {disease_type}
             Patient Data: {patient_data}
             """
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt)
-            return response.text
+            try:
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                return f"⚠️ The AI service is unavailable right now (rate limit or API quota). [{type(e).__name__}]"
 
+        st.caption("CSV format: two columns (feature, value), one row per feature. "
+                   "Features: " + ", ".join(get_feature_order()))
         uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
         if uploaded_file is not None:
             try:

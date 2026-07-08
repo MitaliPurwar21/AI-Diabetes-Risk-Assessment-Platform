@@ -3,11 +3,10 @@ numpy
 pandas
 matplotlib
 seaborn
-scikit-learn
-xgboost
+scikit-learn==1.7.2
+xgboost==2.0.3
 fpdf
-shap
+shap==0.49.1
 google-generativeai
 python-dotenv
 joblib
-scikit-learn>=1.0

@@ -11,8 +11,8 @@ def app():
         st.markdown('''
             **1. Machine Learning Risk Classification**
             
-            This project explores how machine learning can be used for diabetes risk classification. It uses a **synthetic dataset of 100,000 patient records** (generated from the original PIMA dataset's statistics) to train and compare three different models: Logistic Regression, Random Forest, and XGBoost.
-            
+            This project explores how machine learning can be used for diabetes risk classification. It uses the **Kaggle Diabetes Prediction Dataset (100,000 real clinical records)** to train and compare three different models: Logistic Regression, Random Forest, and XGBoost. The pipeline one-hot encodes the categorical fields (gender, smoking history) and handles the ~8.5% positive-class imbalance.
+
             The system automatically selects the best-performing model (based on ROC AUC score) from the training script to provide predictions.
         ''')
 
@@ -22,9 +22,9 @@ def app():
         st.markdown('''
             **2. Explainable AI (XAI) with SHAP**
             
-            A key goal of this project is to move beyond "black box" predictions. When a prediction is made on the 'Diagnosis' page, the app generates a **SHAP (SHapley Additive exPlanations) force plot**.
+            A key goal of this project is to move beyond "black box" predictions. When a prediction is made on the 'Diagnosis' page, the app generates a **SHAP (SHapley Additive exPlanations) contribution chart**.
             
-            This chart shows exactly how each patient feature (like 'Glucose' or 'BMI') contributed to the final risk score, providing transparency and helping to build trust in the model's decision.
+            This chart shows exactly how each patient feature (like 'HbA1c_level' or 'blood_glucose_level') contributed to the final risk score, providing transparency and helping to build trust in the model's decision.
         ''')
     with col2:
         st.image("./images/2.png", caption="Explainable AI (SHAP)", width=200)
