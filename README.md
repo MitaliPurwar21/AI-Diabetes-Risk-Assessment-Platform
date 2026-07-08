@@ -46,8 +46,8 @@ This project is a complete, end-to-end data science application built in Python 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/MitaliPurwar21/AI-Powered-Diabetes-Risk-Assessment.git
-cd AI-Powered-Diabetes-Risk-Assessment
+git clone https://github.com/MitaliPurwar21/AI-Diabetes-Risk-Assessment-Platform.git
+cd AI-Diabetes-Risk-Assessment-Platform
 ```
 
 ### 2. Set Up the Environment
