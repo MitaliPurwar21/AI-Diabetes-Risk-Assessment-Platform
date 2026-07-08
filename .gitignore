@@ -4,5 +4,8 @@ venv/
 # Python cache
 __pycache__/
 
+# macOS
+.DS_Store
+
 # Streamlit secrets file (DO NOT UPLOAD)
 .streamlit/secrets.toml

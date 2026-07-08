@@ -9,8 +9,8 @@ This project is a complete, end-to-end data science application built in Python 
 ## Key Features
 
 * **✨ Automated Model Selection:** The app doesn't just use one model. The training script (`scripts/train_model.py`) compares `LogisticRegression`, `RandomForest`, and `XGBoost` and automatically saves the best-performing model (based on ROC AUC) for the app to use.
-* **🔬 Explainable Predictions (XAI):** Built with `SHAP` (SHapley Additive exPlanations). After making a prediction, the app generates a "force plot" that shows *why* the model made its decision, detailing how each feature (like Glucose or BMI) "pushed" the risk score. This logic correctly handles *both* linear models (`LogisticRegression`) and tree-based models (`XGBoost`, `RandomForest`).
-* **📊 Synthetic Data Generation:** To avoid overfitting on the small, common PIMA dataset, this project uses a 100,000-row synthetic dataset. The script (`diabetes_synthetic.py`) generates this data by modeling feature distributions and using a logistic function to create a probabilistic outcome.
+* **🔬 Explainable Predictions (XAI):** Built with `SHAP` (SHapley Additive exPlanations). After making a prediction, the app shows a contribution chart of *why* the model decided the way it did, detailing how each feature (like HbA1c or blood glucose) pushed the risk score up or down. This logic handles *both* linear models (`LogisticRegression`) and tree-based models (`XGBoost`, `RandomForest`).
+* **📊 Real Clinical Data:** Trained on the Kaggle Diabetes Prediction Dataset (100,000 real records: age, BMI, HbA1c, blood glucose, smoking history, and more). The pipeline one-hot encodes the categorical fields and handles the ~8.5% positive-class imbalance with class weighting.
 * **📈 Analytical Dashboard:** A dedicated "Result" tab shows a full breakdown of the model training process, including:
     * A performance comparison table for all 3 models.
     * The confusion matrix for the winning model.
@@ -46,8 +46,8 @@ This project is a complete, end-to-end data science application built in Python 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/MitaliPurwar21/AI-Diabetes-Risk-Assessment-Platform.git
-cd AI-Diabetes-Risk-Assessment-Platform
+git clone https://github.com/MitaliPurwar21/AI-Powered-Diabetes-Risk-Assessment.git
+cd AI-Powered-Diabetes-Risk-Assessment
 ```
 
 ### 2. Set Up the Environment

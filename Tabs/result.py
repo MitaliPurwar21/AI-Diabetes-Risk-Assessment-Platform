@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from web_functions import load_model, load_metrics, get_feature_order
+from web_functions import load_model, load_metrics, get_feature_order, get_encoded_feature_names
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
@@ -20,23 +20,26 @@ def app():
     # --- Load Data and Models ---
     try:
         # Load data for correlations and population means
-        df = pd.read_csv("diabetes.csv")
-        
+        df = pd.read_csv("diabetes_prediction_dataset.csv")
+
         # Load model for feature importances
         model = load_model()
-        
+
         # Load all metrics
         all_metrics = load_metrics() # This is now a dictionary of models
 
         if "error" in all_metrics:
             raise FileNotFoundError(all_metrics["error"])
-        
+
     except FileNotFoundError:
-        st.error("Error: Could not find necessary files (diabetes.csv, model_pipeline.pkl, metrics.json). Please run the training script.")
+        st.error("Error: Could not find necessary files (diabetes_prediction_dataset.csv, model_pipeline.pkl, metrics.json). Please run the training script.")
         return
     except Exception as e:
         st.error(f"An error occurred while loading data: {e}")
         return
+
+    # numeric columns (drop the target), used for correlations and comparisons
+    numeric_cols = [c for c in df.select_dtypes("number").columns if c != "diabetes"]
 
     # --- Tab Layout ---
     tab1, tab2, tab3 = st.tabs(["Model Performance", "Data Analysis", "Patient vs. Population"])
@@ -46,7 +49,7 @@ def app():
     # ----------------------------------------
     with tab1:
         st.header("Model Performance Metrics")
-        
+
         # Model Comparison Table
         st.subheader("Model Comparison")
         try:
@@ -61,13 +64,13 @@ def app():
             df_comparison = pd.DataFrame(comparison_data).sort_values(by="ROC AUC", ascending=False)
             df_comparison["Accuracy"] = df_comparison["Accuracy"].apply(lambda x: f"{x*100:.2f}%")
             df_comparison["ROC AUC"] = df_comparison["ROC AUC"].apply(lambda x: f"{x:.4f}")
-            
+
             st.dataframe(df_comparison.set_index("Model"))
             st.info("The best model (based on ROC AUC) is automatically selected for prediction and analysis below.")
-            
+
         except Exception as e:
             st.error(f"Could not generate model comparison table: {e}")
-            
+
         # --- Analysis of the BEST Model ---
         # Find the best model name from metrics (the one that won)
         best_model_name = ""
@@ -76,7 +79,7 @@ def app():
             if metrics.get('roc_auc', -1) > best_roc_auc:
                 best_roc_auc = metrics.get('roc_auc')
                 best_model_name = model_name
-                
+
         if not best_model_name:
              st.error("Could not identify the best model from metrics.json")
              return
@@ -85,7 +88,7 @@ def app():
         best_model_metrics = all_metrics[best_model_name]
 
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.subheader("Accuracy & ROC AUC")
             if "accuracy" in best_model_metrics:
@@ -96,16 +99,15 @@ def app():
             st.subheader("Feature Importances")
             try:
                 clf = model.named_steps['clf']
-                feature_names = get_feature_order()
+                # importances live in the encoded space (after one-hot), so use those names
+                feature_names = get_encoded_feature_names(model)
                 importances = None
 
-                # --- NEW: Check model type ---
                 if isinstance(clf, (RandomForestClassifier, XGBClassifier)):
                     importances = clf.feature_importances_
                 elif isinstance(clf, LogisticRegression):
                     # For linear models, we use the absolute value of the coefficients
                     importances = np.abs(clf.coef_[0])
-                # --- END OF NEW BLOCK ---
 
                 if importances is not None:
                     # Create a DataFrame
@@ -133,8 +135,7 @@ def app():
             st.subheader("Confusion Matrix (Test Set)")
             if "confusion_matrix" in best_model_metrics:
                 cm = best_model_metrics['confusion_matrix']
-                
-                # --- ✅ START OF FIXED CODE 2 ---
+
                 fig, ax = plt.subplots()
                 ax.set_facecolor("black")
                 sns.heatmap(cm, annot=True, fmt='d', cmap="coolwarm", ax=ax,
@@ -145,8 +146,7 @@ def app():
                 ax.set_xticklabels(['No Diabetes (0)', 'Diabetes (1)'], color='white')
                 ax.set_yticklabels(['No Diabetes (0)', 'Diabetes (1)'], color='white', rotation=0)
                 st.pyplot(fig)
-                # --- ✅ END OF FIXED CODE 2 ---
-            
+
             else:
                 st.info("Confusion matrix not found.")
 
@@ -155,25 +155,25 @@ def app():
     # ----------------------------------------
     with tab2:
         st.header("Exploratory Data Analysis")
-        
+
         st.subheader("Feature Correlation Heatmap")
         fig, ax = plt.subplots(figsize=(12, 8))
         ax.set_facecolor("black")
-        corr = df.corr()
+        corr = df.corr(numeric_only=True)
         sns.heatmap(corr, annot=True, fmt='.2f', cmap='viridis', ax=ax,
                     annot_kws={"color": "black", "size": 8})
         ax.set_title("Feature Correlation", color='white')
         plt.setp(ax.get_xticklabels(), color='white', rotation=45, ha='right')
         plt.setp(ax.get_yticklabels(), color='white', rotation=0)
         st.pyplot(fig)
-        
+
         st.subheader("Feature Distributions by Outcome")
-        feature = st.selectbox("Select Feature to Visualize", get_feature_order())
-        
+        feature = st.selectbox("Select Feature to Visualize", numeric_cols)
+
         fig, ax = plt.subplots()
         ax.set_facecolor("black")
         # Histogram
-        sns.histplot(data=df, x=feature, hue='Outcome', kde=True, ax=ax, palette=['#00FFFF', '#FF00FF'])
+        sns.histplot(data=df, x=feature, hue='diabetes', kde=True, ax=ax, palette=['#00FFFF', '#FF00FF'])
         ax.set_title(f"{feature} Distribution by Diabetes Outcome", color='white')
         ax.set_xlabel(feature, color='white')
         ax.set_ylabel("Count", color='white')
@@ -184,16 +184,16 @@ def app():
     # ----------------------------------------
     with tab3:
         st.header("Your Vitals vs. Population Average")
-        
+
         if 'user_input_data' in st.session_state:
             user_data = st.session_state['user_input_data']
-            
-            # Calculate population means
-            pop_means = df[get_feature_order()].mean()
-            
-            # Create comparison DataFrame
+
+            # Compare the numeric inputs against population means
+            user_numeric = {k: user_data[k] for k in numeric_cols if k in user_data}
+            pop_means = df[list(user_numeric.keys())].mean()
+
             df_compare = pd.DataFrame({
-                'Your Value': user_data,
+                'Your Value': user_numeric,
                 'Population Mean': pop_means
             })
 
@@ -206,9 +206,9 @@ def app():
             plt.setp(ax.get_xticklabels(), color='white', rotation=45, ha='right')
             ax.legend()
             st.pyplot(fig)
-            
+
             st.dataframe(df_compare.T.round(2)) # Show the data as well
-            
+
         else:
             st.info("ℹ️ Please run a prediction on the 'Diagnosis' page to see your personalized comparison.")
 

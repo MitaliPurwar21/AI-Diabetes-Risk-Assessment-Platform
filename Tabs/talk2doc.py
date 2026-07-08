@@ -23,10 +23,12 @@ def ask_gemini(query):
     Provide a clear, concise, and accurate medical response.
     """
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
-    
-    return response.text
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"⚠️ The AI service is unavailable right now (rate limit or API quota). [{type(e).__name__}]"
 
 # Streamlit UI
 def app():

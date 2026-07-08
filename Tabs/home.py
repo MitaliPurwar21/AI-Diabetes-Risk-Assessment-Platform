@@ -15,11 +15,11 @@ def app():
     
     st.markdown(
     """
-    * **Robust Model Training:** This app isn't built on a small, standard dataset. It's powered by a model trained on a **100,000-row synthetic dataset** to ensure more stable and generalizable performance.
-    
-    * **Automated Model Selection:** The prediction model wasn't just *chosen*—it *competed*. The training script compares **Logistic Regression, Random Forest, and XGBoost**, automatically selecting the best-performing model (based on ROC AUC) to serve in this app.
-    
-    * **Explainable AI (XAI):** This tool doesn't just give a prediction; it explains *why*. Using **SHAP plots** on the 'Diagnosis' page, you can see exactly how each factor (like Glucose or BMI) contributed to the final risk score.
+    * **Robust Model Training:** This app is trained on the **100,000-record Kaggle Diabetes Prediction Dataset** of real clinical records with age, BMI, HbA1c, blood glucose, and smoking history.
+
+    * **Automated Model Selection:** The prediction model wasn't just *chosen*, it *competed*. The training script compares **Logistic Regression, Random Forest, and XGBoost** (handling the ~8.5% positive-class imbalance), automatically selecting the best-performing model (based on ROC AUC) to serve in this app.
+
+    * **Explainable AI (XAI):** This tool doesn't just give a prediction; it explains *why*. Using **SHAP plots** on the 'Diagnosis' page, you can see exactly how each factor (like HbA1c or blood glucose) contributed to the final risk score.
     """)
 
     st.markdown(
